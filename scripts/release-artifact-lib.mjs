@@ -643,8 +643,29 @@ async function smokeHost({ command, args, cwd, env }) {
 }
 
 async function shutdownSmokedHost(smoke, signal = "SIGINT") {
-  smoke.child.kill(signal);
-  return smoke.closePromise;
+  if (process.platform === "win32" && smoke.child.pid) {
+    try {
+      await runCommand("taskkill", ["/pid", String(smoke.child.pid), "/t", "/f"]);
+    } catch {
+      smoke.child.kill(signal);
+    }
+  } else {
+    smoke.child.kill(signal);
+  }
+
+  const result = await Promise.race([
+    smoke.closePromise,
+    sleep(10000).then(() => {
+      throw new Error("Timed out waiting for smoke-test host process to exit.");
+    }),
+  ]);
+
+  if (process.platform === "win32") {
+    // Windows can release executable file handles just after process close.
+    await sleep(500);
+  }
+
+  return result;
 }
 
 async function verifySourceArtifact({ repoRoot, artifactRoot, archivePath }) {
