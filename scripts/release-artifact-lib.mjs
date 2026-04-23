@@ -166,7 +166,7 @@ async function createReleaseArchive(outputRoot, artifactName) {
   return archivePath;
 }
 
-async function getLocalCorePackageArchive(repoRoot) {
+async function getLocalCorePackageArchive(repoRoot, stagedRoot) {
   const candidateRoots = [
     process.env.SERVICE_LASSO_CORE_REPO_ROOT,
     path.join(repoRoot, ".service-lasso-core"),
@@ -180,23 +180,35 @@ async function getLocalCorePackageArchive(repoRoot) {
 
     const corePackageJson = JSON.parse(await readFile(path.join(coreRepoRoot, "package.json"), "utf8"));
     const version = process.env.SERVICE_LASSO_RELEASE_VERSION ?? corePackageJson.version;
-    const artifactRoot = path.join(coreRepoRoot, "artifacts", "npm", `service-lasso-package-${version}`);
+    const isolatedOutputRoot = await mkdtemp(path.join(os.tmpdir(), "service-lasso-core-package-"));
+    const artifactRoot = path.join(isolatedOutputRoot, `service-lasso-package-${version}`);
     const archivePath = path.join(artifactRoot, `service-lasso-service-lasso-${version}.tgz`);
-    await rm(artifactRoot, { recursive: true, force: true });
-    await runNpmCommand(["run", "package:stage"], {
-      cwd: coreRepoRoot,
-      env: process.env,
-    });
 
-    await stat(archivePath);
-    return archivePath;
+    try {
+      await runNpmCommand(["run", "package:stage"], {
+        cwd: coreRepoRoot,
+        env: {
+          ...process.env,
+          SERVICE_LASSO_RELEASE_VERSION: version,
+          SERVICE_LASSO_PACKAGE_OUTPUT_ROOT: isolatedOutputRoot,
+        },
+      });
+
+      await stat(archivePath);
+      const localArchivePath = path.join(stagedRoot, ".service-lasso-core-package", path.basename(archivePath));
+      await mkdir(path.dirname(localArchivePath), { recursive: true });
+      await cp(archivePath, localArchivePath, { force: true });
+      return `./${path.relative(stagedRoot, localArchivePath).split(path.sep).join("/")}`;
+    } finally {
+      await rm(isolatedOutputRoot, { recursive: true, force: true });
+    }
   }
 
   return null;
 }
 
 async function installStarterDependencies(stagedRoot, repoRoot) {
-  const localCorePackageArchive = await getLocalCorePackageArchive(repoRoot);
+  const localCorePackageArchive = await getLocalCorePackageArchive(repoRoot, stagedRoot);
 
   if (localCorePackageArchive) {
     await runNpmCommand(["install", localCorePackageArchive], {
