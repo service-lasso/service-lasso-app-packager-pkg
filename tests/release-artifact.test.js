@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { rm } from "node:fs/promises";
 import {
   createTemporaryOutputRoot,
-  readRootPackageJson,
   stageReleaseArtifacts,
   verifyStagedArtifacts,
 } from "../scripts/release-artifact-lib.mjs";
@@ -16,17 +15,20 @@ test("starter release artifacts can be staged and verified", async () => {
   const outputRoot = await createTemporaryOutputRoot();
 
   try {
-    const packageJson = await readRootPackageJson(repoRoot);
-    const packageSuffix = packageJson.name.split("/").at(-1);
     const staged = await stageReleaseArtifacts({
       repoRoot,
+      version: "2026.4.23-abcdef1",
       outputRoot,
     });
 
-    assert.match(staged.baseName, new RegExp(`^${packageSuffix}-\\d+\\.\\d+\\.\\d+$`));
+    assert.equal(staged.baseName, "service-lasso-app-packager-pkg-2026.4.23-abcdef1");
     assert.equal(staged.artifacts.source.manifest.artifactKind, "starter-template-source");
     assert.equal(staged.artifacts.runtime.manifest.artifactKind, "runnable-bootstrap-download");
     assert.equal(staged.artifacts.preloaded.manifest.artifactKind, "runnable-preloaded");
+    assert.match(staged.artifacts.runtime.artifactName, /-runtime-(win32|linux|darwin)$/);
+    assert.match(staged.artifacts.preloaded.artifactName, /-preloaded-(win32|linux|darwin)$/);
+    assert.ok(staged.artifacts.runtime.pkgExecutablePath);
+    assert.ok(staged.artifacts.preloaded.pkgExecutablePath);
 
     const verified = await verifyStagedArtifacts({
       repoRoot,

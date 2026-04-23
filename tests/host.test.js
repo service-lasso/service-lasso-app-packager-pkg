@@ -4,14 +4,14 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { once } from "node:events";
-import { resolveAppNodeConfig, validateAppNodeConfig } from "../src/config.js";
+import { resolveAppPackagerPkgConfig, validateAppPackagerPkgConfig } from "../src/config.js";
 import { createHostServer, createHostStatus } from "../src/server.js";
 
 async function createFixtureRoots() {
-  const root = await mkdtemp(path.join(tmpdir(), "service-lasso-app-node-"));
+  const root = await mkdtemp(path.join(tmpdir(), "service-lasso-app-packager-pkg-"));
   const siblingRoot = path.join(root, "siblings");
   const adminDistRoot = path.join(siblingRoot, "lasso-@serviceadmin", "dist");
-  const sourceServicesRoot = path.join(root, "service-lasso-app-node", "services");
+  const sourceServicesRoot = path.join(root, "service-lasso-app-packager-pkg", "services");
 
   await mkdir(adminDistRoot, { recursive: true });
   await mkdir(path.join(sourceServicesRoot, "echo-service"), { recursive: true });
@@ -56,23 +56,23 @@ async function createFixtureRoots() {
   };
 }
 
-test("app-node config resolves deterministic sibling repo paths", async () => {
+test("app-packager-pkg config resolves deterministic sibling repo paths", async () => {
   const fixture = await createFixtureRoots();
 
   try {
-    const config = resolveAppNodeConfig({
-      repoRoot: path.join(fixture.root, "service-lasso-app-node"),
+    const config = resolveAppPackagerPkgConfig({
+      repoRoot: path.join(fixture.root, "service-lasso-app-packager-pkg"),
       siblingRoot: fixture.siblingRoot,
-      hostPort: 19110,
-      runtimePort: 18181,
+      hostPort: 19030,
+      runtimePort: 18083,
     });
 
-    assert.equal(config.hostUrl, "http://127.0.0.1:19110");
-    assert.equal(config.runtimeUrl, "http://127.0.0.1:18181");
+    assert.equal(config.hostUrl, "http://127.0.0.1:19030");
+    assert.equal(config.runtimeUrl, "http://127.0.0.1:18083");
     assert.equal(config.adminDistRoot, fixture.adminDistRoot);
     assert.equal(config.sourceServicesRoot, fixture.sourceServicesRoot);
 
-    await assert.doesNotReject(() => validateAppNodeConfig(config));
+    await assert.doesNotReject(() => validateAppPackagerPkgConfig(config));
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
@@ -82,18 +82,19 @@ test("host server serves shell, host status, and mounted admin assets", async ()
   const fixture = await createFixtureRoots();
 
   try {
-    const config = await validateAppNodeConfig(
-      resolveAppNodeConfig({
-        repoRoot: path.join(fixture.root, "service-lasso-app-node"),
+    const config = await validateAppPackagerPkgConfig(
+      resolveAppPackagerPkgConfig({
+        repoRoot: path.join(fixture.root, "service-lasso-app-packager-pkg"),
         siblingRoot: fixture.siblingRoot,
         hostPort: 0,
-        runtimePort: 18181,
+        runtimePort: 18083,
       }),
     );
     const status = createHostStatus(config);
-    assert.equal(status.app, "@service-lasso/service-lasso-app-node");
+    assert.equal(status.app, "@service-lasso/service-lasso-app-packager-pkg");
     assert.equal(status.sourceServicesRoot, fixture.sourceServicesRoot);
     assert.equal(status.artifactMode, "bootstrap-download");
+    assert.equal(status.packagingTarget, "pkg");
 
     const server = createHostServer(config);
     server.listen(0, "127.0.0.1");
@@ -107,7 +108,7 @@ test("host server serves shell, host status, and mounted admin assets", async ()
       const shellResponse = await fetch(`${baseUrl}/`);
       assert.equal(shellResponse.status, 200);
       const shellHtml = await shellResponse.text();
-      assert.match(shellHtml, /Plain Node host for Service Lasso/);
+      assert.match(shellHtml, /pkg-packaged Node host for Service Lasso/);
       assert.match(shellHtml, /Open Service Admin/);
 
       const statusResponse = await fetch(`${baseUrl}/api/host-status`);
@@ -117,6 +118,7 @@ test("host server serves shell, host status, and mounted admin assets", async ()
       assert.equal(statusBody.adminDistRoot, fixture.adminDistRoot);
       assert.equal(statusBody.sourceServicesRoot, fixture.sourceServicesRoot);
       assert.equal(statusBody.artifactMode, "bootstrap-download");
+      assert.equal(statusBody.packagingTarget, "pkg");
 
       const assetResponse = await fetch(`${baseUrl}/admin/asset.js`);
       assert.equal(assetResponse.status, 200);

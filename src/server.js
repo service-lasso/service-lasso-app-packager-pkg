@@ -27,7 +27,7 @@ function createShellHtml(config) {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Service Lasso App Node</title>
+    <title>Service Lasso App Packager pkg</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       :root {
@@ -124,11 +124,11 @@ function createShellHtml(config) {
   <body>
     <main>
       <section class="hero">
-        <span class="badge">App Node Host</span>
-        <h1>Plain Node host for Service Lasso</h1>
+        <span class="badge">pkg Wrapper Host</span>
+        <h1>pkg-packaged Node host for Service Lasso</h1>
         <p>
-          This host owns the local runtime bootstrap, surfaces its own status page,
-          and makes Service Admin reachable against the shared workspace containing Echo Service.
+          This host keeps the same canonical Node payload model, but releases it behind a
+          pkg launcher so downstream teams can evaluate a packaged executable wrapper.
         </p>
         <div class="actions">
           <a class="action" href="/admin/">
@@ -151,6 +151,11 @@ function createShellHtml(config) {
           <div>API base: <code>${config.runtimeUrl}</code></div>
           <div>servicesRoot: <code>${config.servicesRoot}</code></div>
           <div>workspaceRoot: <code>${config.workspaceRoot}</code></div>
+        </div>
+        <div class="card">
+          <strong>Packaging target</strong>
+          <div>Wrapper: <code>pkg</code></div>
+          <div>Payload root: <code>${config.repoRoot}</code></div>
         </div>
         <div class="card">
           <strong>Service under test</strong>
@@ -191,7 +196,7 @@ async function resolveStaticFile(config, pathname) {
 
 export function createHostStatus(config) {
   return {
-    app: "@service-lasso/service-lasso-app-node",
+    app: "@service-lasso/service-lasso-app-packager-pkg",
     hostUrl: config.hostUrl,
     runtimeUrl: config.runtimeUrl,
     adminUrl: config.adminUrl,
@@ -199,11 +204,12 @@ export function createHostStatus(config) {
     sourceServicesRoot: config.sourceServicesRoot,
     workspaceRoot: config.workspaceRoot,
     adminDistRoot: config.adminDistRoot,
+    packagingTarget: "pkg",
     artifactMode: "bootstrap-download",
     notes: [
       "Host-owned shell is served at /.",
-      "Service Admin is mounted from the sibling built dist under /admin/.",
-      "Runtime is expected on the fixed port baked into the current admin build.",
+      "Service Admin is mounted from the sibling built dist or bundled payload under /admin/.",
+      "The packaged executable wrapper launches the same tracked app payload through a bundled Node runtime.",
       "Tracked services/ definitions are copied into the prepared servicesRoot before runtime startup.",
       "Echo Service install/start now relies on manifest-owned archive metadata instead of a generated local wrapper.",
     ],
