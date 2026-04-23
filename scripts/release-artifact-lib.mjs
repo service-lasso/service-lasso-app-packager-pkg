@@ -31,20 +31,52 @@ const RUNTIME_RELEASE_PATHS = [
 ];
 
 const NPM_COMMAND = process.platform === "win32" ? "npm.cmd" : "npm";
+const PKG_VERSION = "5.8.1";
 
 export async function readRootPackageJson(repoRoot) {
   return JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
 }
 
 export async function getReleaseVersion(repoRoot) {
-  const packageJson = await readRootPackageJson(repoRoot);
-  return packageJson.version;
+  return process.env.SERVICE_LASSO_RELEASE_VERSION ?? (await readRootPackageJson(repoRoot)).version;
 }
 
 export async function getArtifactNameBase(repoRoot, version) {
   const packageJson = await readRootPackageJson(repoRoot);
   const packageSuffix = packageJson.name.split("/").at(-1);
   return `${packageSuffix}-${version}`;
+}
+
+function getPackageSuffix(packageJson) {
+  return packageJson.name.split("/").at(-1);
+}
+
+function getArtifactPlatform() {
+  return process.platform;
+}
+
+export function getPkgExecutableName(packageSuffix = "service-lasso-app-packager-pkg") {
+  return process.platform === "win32" ? `${packageSuffix}.exe` : packageSuffix;
+}
+
+export function getPkgOutputPath(outputRoot, packageSuffix = "service-lasso-app-packager-pkg") {
+  return path.join(outputRoot, getPkgExecutableName(packageSuffix));
+}
+
+function getBundledNodeBinaryName() {
+  return process.platform === "win32" ? "node.exe" : "node";
+}
+
+function getPkgTarget() {
+  if (process.platform === "win32") {
+    return "node18-win-x64";
+  }
+
+  if (process.platform === "darwin") {
+    return process.arch === "arm64" ? "node18-macos-arm64" : "node18-macos-x64";
+  }
+
+  return "node18-linux-x64";
 }
 
 async function pathExists(targetPath) {
@@ -148,7 +180,7 @@ async function getLocalCorePackageArchive(repoRoot) {
     }
 
     const corePackageJson = JSON.parse(await readFile(path.join(coreRepoRoot, "package.json"), "utf8"));
-    const version = corePackageJson.version;
+    const version = process.env.SERVICE_LASSO_RELEASE_VERSION ?? corePackageJson.version;
     const artifactRoot = path.join(coreRepoRoot, "artifacts", "npm", `service-lasso-package-${version}`);
     const archivePath = path.join(artifactRoot, `service-lasso-service-lasso-${version}.tgz`);
     await rm(artifactRoot, { recursive: true, force: true });
@@ -181,6 +213,36 @@ async function installStarterDependencies(stagedRoot, repoRoot) {
   });
 }
 
+export async function buildPkgWrapper({ workingRoot, launcherPath, outputPath }) {
+  const resolvedWorkingRoot = workingRoot ?? path.dirname(outputPath);
+  const resolvedLauncherPath = launcherPath ?? path.join(resolvedWorkingRoot, "src", "pkg-launcher.cjs");
+  const resolvedOutputPath = path.resolve(outputPath);
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  const launcherArg =
+    path.dirname(resolvedLauncherPath) === path.join(resolvedWorkingRoot, "src")
+      ? path.join("src", path.basename(resolvedLauncherPath))
+      : resolvedLauncherPath;
+  const outputArg = path.dirname(resolvedOutputPath) === resolvedWorkingRoot ? path.basename(resolvedOutputPath) : resolvedOutputPath;
+  await runNpmCommand(
+    [
+      "exec",
+      "--yes",
+      `--package=pkg@${PKG_VERSION}`,
+      "--",
+      "pkg",
+      launcherArg,
+      "--target",
+      getPkgTarget(),
+      "--output",
+      outputArg,
+    ],
+    {
+      cwd: resolvedWorkingRoot,
+      env: process.env,
+    },
+  );
+}
+
 async function writeReleaseManifest({
   repoRoot,
   artifactRoot,
@@ -189,6 +251,7 @@ async function writeReleaseManifest({
   artifactKind,
   shippedFiles,
   notes,
+  startCommand = "npm start",
 }) {
   const packageJson = await readRootPackageJson(repoRoot);
   const manifest = {
@@ -198,7 +261,7 @@ async function writeReleaseManifest({
     artifactKind,
     shippedFiles,
     entrypoint: "src/index.js",
-    startCommand: "npm start",
+    startCommand,
     notes,
   };
 
@@ -222,6 +285,7 @@ async function stageSingleArtifact({
   installDependencies = false,
   adminDistRoot = null,
   preloadedArchive = null,
+  buildPkgExecutable = false,
 }) {
   const artifactRoot = path.join(outputRoot, artifactName);
   await rm(artifactRoot, { recursive: true, force: true });
@@ -257,6 +321,22 @@ async function stageSingleArtifact({
     await cp(archivePath, targetPath, { force: true });
   }
 
+  const packageJson = await readRootPackageJson(repoRoot);
+  const packageSuffix = getPackageSuffix(packageJson);
+  let pkgExecutableRelativePath = null;
+
+  if (buildPkgExecutable) {
+    pkgExecutableRelativePath = getPkgExecutableName(packageSuffix);
+    const bundledNodePath = path.join(artifactRoot, "node-runtime", getBundledNodeBinaryName());
+    await mkdir(path.dirname(bundledNodePath), { recursive: true });
+    await cp(process.execPath, bundledNodePath, { force: true });
+    await buildPkgWrapper({
+      workingRoot: artifactRoot,
+      launcherPath: path.join(artifactRoot, "src", "pkg-launcher.cjs"),
+      outputPath: path.join(artifactRoot, pkgExecutableRelativePath),
+    });
+  }
+
   const manifest = await writeReleaseManifest({
     repoRoot,
     artifactRoot,
@@ -267,8 +347,12 @@ async function stageSingleArtifact({
       ...relativePaths,
       ...(installDependencies ? ["node_modules"] : []),
       ...(adminDistRoot ? [".payload"] : []),
+      ...(buildPkgExecutable ? ["node-runtime"] : []),
+      ...(preloadedArchive ? [".workspace"] : []),
+      ...(pkgExecutableRelativePath ? [pkgExecutableRelativePath] : []),
       "release-artifact.json",
     ],
+    startCommand: pkgExecutableRelativePath ? `./${pkgExecutableRelativePath}` : "npm start",
     notes,
   });
   const archivePath = await createReleaseArchive(outputRoot, artifactName);
@@ -278,6 +362,7 @@ async function stageSingleArtifact({
     artifactRoot,
     archivePath,
     manifest,
+    pkgExecutablePath: pkgExecutableRelativePath ? path.join(artifactRoot, pkgExecutableRelativePath) : null,
   };
 }
 
@@ -383,7 +468,9 @@ async function createVerificationReleaseFixture(rootDir, assetNameOverride = nul
       `Compress-Archive -Path '${path.join(workRoot, "*").replace(/'/g, "''")}' -DestinationPath '${path.join(archiveRoot, assetName).replace(/'/g, "''")}' -Force`,
     ]);
   } else {
-    assetName = assetNameOverride ?? (process.platform === "darwin" ? "echo-service-darwin.tar.gz" : "echo-service-linux.tar.gz");
+    assetName =
+      assetNameOverride ??
+      (process.platform === "darwin" ? "echo-service-darwin.tar.gz" : "echo-service-linux.tar.gz");
     archiveType = "tar.gz";
     await runCommand("tar", ["-czf", path.join(archiveRoot, assetName), "-C", workRoot, "."]);
   }
@@ -465,11 +552,10 @@ async function createVerificationSourceServicesRoot(stagedRoot, archiveServer, f
   return sourceServicesRoot;
 }
 
-async function smokeStarterHost(stagedRoot, env) {
+async function smokeHost({ command, args, cwd, env }) {
   return new Promise((resolve, reject) => {
-    const entrypoint = path.join(stagedRoot, "src", "index.js");
-    const child = spawn(process.execPath, [entrypoint], {
-      cwd: stagedRoot,
+    const child = spawn(command, args, {
+      cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -512,14 +598,14 @@ async function smokeStarterHost(stagedRoot, env) {
 
       finish(() =>
         reject(
-          new Error(`${process.execPath} ${entrypoint} exited early with code ${code}\nstdout:\n${stdout}\nstderr:\n${stderr}`),
+          new Error(`${command} ${args.join(" ")} exited early with code ${code}\nstdout:\n${stdout}\nstderr:\n${stderr}`),
         ),
       );
     });
 
     void (async () => {
       try {
-        const hostStatus = await waitForJson(`http://127.0.0.1:${env.SERVICE_LASSO_APP_NODE_HOST_PORT}/api/host-status`);
+        const hostStatus = await waitForJson(`http://127.0.0.1:${env.SERVICE_LASSO_APP_PACKAGER_PKG_HOST_PORT}/api/host-status`);
         const runtimeHealth = await waitForJson(`http://127.0.0.1:${env.SERVICE_LASSO_API_PORT}/api/health`);
 
         finish(() =>
@@ -554,12 +640,17 @@ async function verifySourceArtifact({ repoRoot, artifactRoot, archivePath }) {
   await installStarterDependencies(artifactRoot, repoRoot);
   const hostPort = await reserveLoopbackPort();
   const runtimePort = await reserveLoopbackPort();
-  const smoke = await smokeStarterHost(artifactRoot, {
-    ...process.env,
-    SERVICE_LASSO_APP_NODE_HOST_PORT: hostPort,
-    SERVICE_LASSO_API_PORT: runtimePort,
-    SERVICE_LASSO_APP_NODE_ADMIN_DIST_ROOT: adminDistRoot,
-    SERVICE_LASSO_WORKSPACE_ROOT: path.join(artifactRoot, ".workspace", "runtime"),
+  const smoke = await smokeHost({
+    command: process.execPath,
+    args: [path.join(artifactRoot, "src", "index.js")],
+    cwd: artifactRoot,
+    env: {
+      ...process.env,
+      SERVICE_LASSO_APP_PACKAGER_PKG_HOST_PORT: hostPort,
+      SERVICE_LASSO_API_PORT: runtimePort,
+      SERVICE_LASSO_APP_PACKAGER_PKG_ADMIN_DIST_ROOT: adminDistRoot,
+      SERVICE_LASSO_WORKSPACE_ROOT: path.join(artifactRoot, ".workspace", "runtime"),
+    },
   });
 
   try {
@@ -578,18 +669,26 @@ async function verifyRuntimeArtifact({ artifactRoot, archivePath }) {
   await stat(path.join(artifactRoot, "release-artifact.json"));
   await stat(path.join(artifactRoot, "node_modules"));
   await stat(path.join(artifactRoot, ".payload", "admin", "index.html"));
+  const artifactPackage = JSON.parse(await readFile(path.join(artifactRoot, "package.json"), "utf8"));
+  const pkgExecutablePath = getPkgOutputPath(artifactRoot, getPackageSuffix(artifactPackage));
+  await stat(pkgExecutablePath);
 
   const fixture = await createVerificationReleaseFixture(artifactRoot);
   const archiveServer = await startArchiveServer(fixture);
   const sourceServicesRoot = await createVerificationSourceServicesRoot(artifactRoot, archiveServer, fixture);
   const hostPort = await reserveLoopbackPort();
   const runtimePort = await reserveLoopbackPort();
-  const smoke = await smokeStarterHost(artifactRoot, {
-    ...process.env,
-    SERVICE_LASSO_APP_NODE_HOST_PORT: hostPort,
-    SERVICE_LASSO_API_PORT: runtimePort,
-    SERVICE_LASSO_APP_NODE_SOURCE_SERVICES_ROOT: sourceServicesRoot,
-    SERVICE_LASSO_WORKSPACE_ROOT: path.join(artifactRoot, ".workspace", "runtime"),
+  const smoke = await smokeHost({
+    command: pkgExecutablePath,
+    args: [],
+    cwd: artifactRoot,
+    env: {
+      ...process.env,
+      SERVICE_LASSO_APP_PACKAGER_PKG_HOST_PORT: hostPort,
+      SERVICE_LASSO_API_PORT: runtimePort,
+      SERVICE_LASSO_APP_PACKAGER_PKG_SOURCE_SERVICES_ROOT: sourceServicesRoot,
+      SERVICE_LASSO_WORKSPACE_ROOT: path.join(artifactRoot, ".workspace", "runtime"),
+    },
   });
 
   try {
@@ -611,6 +710,7 @@ async function verifyRuntimeArtifact({ artifactRoot, archivePath }) {
       archiveDownloads: archiveServer.getRequestCount(),
       installStatus: install.status,
       lifecycleState: serviceDetail.lifecycleState ?? null,
+      wrapper: path.basename(pkgExecutablePath),
     };
   } finally {
     await shutdownSmokedHost(smoke, "SIGINT");
@@ -624,6 +724,9 @@ async function verifyPreloadedArtifact({ artifactRoot, archivePath }) {
   await stat(path.join(artifactRoot, "release-artifact.json"));
   await stat(path.join(artifactRoot, "node_modules"));
   await stat(path.join(artifactRoot, ".payload", "admin", "index.html"));
+  const artifactPackage = JSON.parse(await readFile(path.join(artifactRoot, "package.json"), "utf8"));
+  const pkgExecutablePath = getPkgOutputPath(artifactRoot, getPackageSuffix(artifactPackage));
+  await stat(pkgExecutablePath);
 
   const fixture = await createVerificationReleaseFixture(artifactRoot);
   const archiveServer = await startArchiveServer(fixture);
@@ -643,12 +746,17 @@ async function verifyPreloadedArtifact({ artifactRoot, archivePath }) {
 
   const hostPort = await reserveLoopbackPort();
   const runtimePort = await reserveLoopbackPort();
-  const smoke = await smokeStarterHost(artifactRoot, {
-    ...process.env,
-    SERVICE_LASSO_APP_NODE_HOST_PORT: hostPort,
-    SERVICE_LASSO_API_PORT: runtimePort,
-    SERVICE_LASSO_APP_NODE_SOURCE_SERVICES_ROOT: sourceServicesRoot,
-    SERVICE_LASSO_WORKSPACE_ROOT: path.join(artifactRoot, ".workspace", "runtime"),
+  const smoke = await smokeHost({
+    command: pkgExecutablePath,
+    args: [],
+    cwd: artifactRoot,
+    env: {
+      ...process.env,
+      SERVICE_LASSO_APP_PACKAGER_PKG_HOST_PORT: hostPort,
+      SERVICE_LASSO_API_PORT: runtimePort,
+      SERVICE_LASSO_APP_PACKAGER_PKG_SOURCE_SERVICES_ROOT: sourceServicesRoot,
+      SERVICE_LASSO_WORKSPACE_ROOT: path.join(artifactRoot, ".workspace", "runtime"),
+    },
   });
 
   try {
@@ -670,6 +778,7 @@ async function verifyPreloadedArtifact({ artifactRoot, archivePath }) {
       archiveDownloads: archiveServer.getRequestCount(),
       installStatus: install.status,
       lifecycleState: serviceDetail.lifecycleState ?? null,
+      wrapper: path.basename(pkgExecutablePath),
     };
   } finally {
     await shutdownSmokedHost(smoke, "SIGINT");
@@ -681,11 +790,12 @@ async function verifyPreloadedArtifact({ artifactRoot, archivePath }) {
 export async function stageReleaseArtifacts({ repoRoot, outputRoot = path.join(repoRoot, "artifacts"), version, sourceAdminDistRoot } = {}) {
   const resolvedVersion = version ?? (await getReleaseVersion(repoRoot));
   const baseName = await getArtifactNameBase(repoRoot, resolvedVersion);
+  const platform = getArtifactPlatform();
   const sourceFiles = await listExistingPaths(repoRoot, SOURCE_RELEASE_PATHS);
   const runtimeFiles = await listExistingPaths(repoRoot, RUNTIME_RELEASE_PATHS);
   const resolvedAdminDistRoot =
     sourceAdminDistRoot ??
-    process.env.SERVICE_LASSO_APP_NODE_ADMIN_DIST_ROOT ??
+    process.env.SERVICE_LASSO_APP_PACKAGER_PKG_ADMIN_DIST_ROOT ??
     (existsSync(path.resolve(repoRoot, "..", "lasso-@serviceadmin", "dist"))
       ? path.resolve(repoRoot, "..", "lasso-@serviceadmin", "dist")
       : null);
@@ -698,7 +808,7 @@ export async function stageReleaseArtifacts({ repoRoot, outputRoot = path.join(r
     artifactKind: "starter-template-source",
     relativePaths: sourceFiles,
     notes: [
-      "This artifact is the source template for the app-node starter.",
+      "This artifact is the source template for the app-packager-pkg starter.",
       "It keeps the tracked services/ inventory but does not include installed dependencies or bundled runtime payloads.",
     ],
   });
@@ -706,16 +816,17 @@ export async function stageReleaseArtifacts({ repoRoot, outputRoot = path.join(r
   const runtime = await stageSingleArtifact({
     repoRoot,
     outputRoot,
-    artifactName: `${baseName}-runtime`,
+    artifactName: `${baseName}-runtime-${platform}`,
     version: resolvedVersion,
     artifactKind: "runnable-bootstrap-download",
     relativePaths: runtimeFiles,
     notes: [
-      "This artifact is ready to run with installed dependencies and bundled Service Admin assets.",
+      "This artifact is ready to run with installed dependencies, bundled Service Admin assets, and a pkg launcher executable.",
       "It keeps the canonical services/ inventory and installs the Echo Service archive from manifest-owned metadata before use.",
     ],
     installDependencies: true,
     adminDistRoot: resolvedAdminDistRoot,
+    buildPkgExecutable: true,
   });
 
   const echoManifest = JSON.parse(await readFile(path.join(repoRoot, "services", "echo-service", "service.json"), "utf8"));
@@ -724,12 +835,12 @@ export async function stageReleaseArtifacts({ repoRoot, outputRoot = path.join(r
   const preloaded = await stageSingleArtifact({
     repoRoot,
     outputRoot,
-    artifactName: `${baseName}-preloaded`,
+    artifactName: `${baseName}-preloaded-${platform}`,
     version: resolvedVersion,
     artifactKind: "runnable-preloaded",
     relativePaths: runtimeFiles,
     notes: [
-      "This artifact is ready to run with installed dependencies, bundled Service Admin assets, and a preseeded Echo Service archive.",
+      "This artifact is ready to run with installed dependencies, bundled Service Admin assets, a pkg launcher executable, and a preseeded Echo Service archive.",
       "It keeps the canonical services/ inventory and proves no first-run service download is required.",
     ],
     installDependencies: true,
@@ -739,6 +850,7 @@ export async function stageReleaseArtifacts({ repoRoot, outputRoot = path.join(r
       assetName: preloadedFixture.assetName,
       archivePath: preloadedFixture.archivePath,
     },
+    buildPkgExecutable: true,
   });
   await rm(preloadedFixture.fixtureRoot, { recursive: true, force: true });
 
@@ -788,6 +900,6 @@ export async function verifyStagedArtifacts({ repoRoot, staged } = {}) {
   };
 }
 
-export async function createTemporaryOutputRoot(prefix = "service-lasso-app-node-release-") {
+export async function createTemporaryOutputRoot(prefix = "service-lasso-app-packager-pkg-release-") {
   return mkdtemp(path.join(os.tmpdir(), prefix));
 }

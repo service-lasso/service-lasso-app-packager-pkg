@@ -9,10 +9,12 @@ const verified = await verifyStagedArtifacts({
   staged,
 });
 
-console.log("[service-lasso starter] verified release artifacts");
+console.log("[service-lasso-app-packager-pkg] verified release artifacts");
 console.log(`- source artifact: ${verified.artifacts.source.artifactName}`);
 console.log(`- source archive: ${verified.artifacts.source.archivePath}`);
 console.log(`- runtime artifact: ${verified.artifacts.runtime.artifactName}`);
 console.log(`- runtime archive: ${verified.artifacts.runtime.archivePath}`);
+console.log(`- runtime wrapper: ${verified.artifacts.runtime.verification.wrapper}`);
 console.log(`- preloaded artifact: ${verified.artifacts.preloaded.artifactName}`);
 console.log(`- preloaded archive: ${verified.artifacts.preloaded.archivePath}`);
+console.log(`- preloaded wrapper: ${verified.artifacts.preloaded.verification.wrapper}`);

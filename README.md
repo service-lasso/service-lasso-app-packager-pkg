@@ -1,21 +1,22 @@
-# service-lasso-app-node
+# service-lasso-app-packager-pkg
 
-Template repo for a plain-Node app host around Service Lasso.
+Template repo for a `pkg`-wrapped Node Service Lasso app host.
 
 Package identity:
-- `@service-lasso/service-lasso-app-node`
+- `@service-lasso/service-lasso-app-packager-pkg`
 
 Purpose:
-- show how to host Service Lasso in a plain Node app without coupling that logic into core
-- act as a quick-start template for downstream teams
-- stay close to real runtime behavior while remaining outside the core repo
+- show how to take the canonical `service-lasso-app-node` host shape and release it behind a `pkg` launcher
+- act as a quick-start template for downstream teams that want an executable wrapper around the Node host
+- stay close to real runtime behavior while keeping packaging concerns outside the core repo
 
 Expected runtime model:
 - `servicesRoot`
 - `workspaceRoot`
 
 Current implementation:
-- plain Node host entrypoint under `src/index.js`
+- plain Node host payload under `src/index.js`
+- `pkg` launcher wrapper under `src/pkg-launcher.cjs`
 - published `@service-lasso/service-lasso` runtime package consumption
 - host-owned shell at `/`
 - mounted sibling `lasso-@serviceadmin` build at `/admin/`
@@ -26,33 +27,37 @@ Current implementation:
 Current local start command:
 - `npm start`
 
-Current local URLs:
-- host shell: `http://127.0.0.1:19010`
-- admin UI: `http://127.0.0.1:19010/admin/`
-- runtime API: `http://127.0.0.1:18081`
-
-## Current release artifact
-
-This starter repo now has bounded source, bootstrap-download, and preloaded/no-download release artifacts.
-
-Current local commands:
+Current local build and verify commands:
 - `npm test`
+- `npm run package:pkg`
 - `npm run release:artifact`
 - `npm run release:verify`
 
-Current pipelines:
-- `CI`
-  - runs on pushes to `main` and on pull requests
-  - installs dependencies and runs `npm test`
-- `Release`
-  - runs on pushes to `main` or by manual dispatch
-  - runs tests, verifies the artifact, uploads the packaged files, and creates or updates the rolling `latest` release on `main`
+Current local URLs:
+- host shell: `http://127.0.0.1:19030`
+- admin UI: `http://127.0.0.1:19030/admin/`
+- runtime API: `http://127.0.0.1:18083`
+
+## How To Use This Starter
+
+You have three consumer options:
+- use GitHub `Use this template` to start a new repo from this packaging variant
+- clone the repo and run `npm start` to work on the raw Node payload directly
+- download a release artifact from GitHub Releases
+
+The release outputs are:
+- `source`
+  - template/source starter for customization
+- `runtime`
+  - runnable bootstrap-download bundle with a `pkg` launcher wrapper
+- `preloaded`
+  - runnable bundled/no-download bundle with a `pkg` launcher wrapper
+
+Release versions from `main` follow the protected-branch pattern:
+- `yyyy.m.d-<shortsha>`
 
 Current shipped artifact contents are documented in:
 - `docs/release-artifact.md`
-
-Current honest label:
-- this repo ships a runnable plain-Node app-host starter plus explicit source, bootstrap-download, and preloaded runtime bundles
 
 ## Minimal POC
 

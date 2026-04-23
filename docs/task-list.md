@@ -1,52 +1,50 @@
-# App Node task list
+# App Packager pkg task list
 
-This document tracks the first real implementation slice for `service-lasso-app-node`.
+This document tracks the first real implementation slice for `service-lasso-app-packager-pkg`.
 
 ## Goal
 
-Turn the starter into the smallest real plain-Node host that:
+Turn the starter into the smallest real packaging-variant repo that:
 - uses published `@service-lasso/service-lasso`
 - shows host-owned output
 - exposes `lasso-@serviceadmin`
 - discovers real `lasso-echoservice`
+- adds a bounded `pkg` launcher wrapper around the canonical Node host payload
 
 ## Bounded tasks
 
-1. Add package-registry wiring for `@service-lasso/service-lasso`
+1. Start from the proven `service-lasso-app-node` host shape
    status: done
 
-2. Define deterministic local runtime/host ports and sibling-repo path assumptions
+2. Give the repo its own identity, ports, docs, and service metadata
    status: done
 
-3. Replace the placeholder entrypoint with a real Node host
+3. Add a real `pkg` launcher wrapper
    status: done
 
-4. Serve a host-owned shell page with runtime/admin links and status
+4. Add direct tests for config resolution, host routes, and artifact verification
    status: done
 
-5. Mount the built Service Admin app from the sibling repo
+5. Add release artifacts that prove source, bootstrap-download, and preloaded modes through the `pkg` wrapper
    status: done
 
-6. Add direct tests for config resolution and host routes
-   status: done
-
-7. Prove local start behavior against the current workspace
+6. Align release versioning with the protected-branch `yyyy.m.d-<shortsha>` pattern
    status: done
 
 ## Honest current scope
 
-This slice does not yet build a final packaged executable or installer.
+This slice does not yet build:
+- installers
+- code-signed executables
+- multiple packaging-target variants in one repo
 
 It only proves:
 
-**a plain Node host can boot the published runtime, surface its own output, and make Service Admin reachable against the shared workspace containing Echo Service**
+**the canonical Node host can be wrapped with `pkg`, released with honest source/bootstrap/preloaded outputs, and still surface Service Admin against real Echo Service**
 
 ## Current evidence
 
 - `npm test`
-- local smoke:
-  - host shell on `http://127.0.0.1:19010`
-  - runtime API on `http://127.0.0.1:18081`
-  - admin UI on `/admin/`
-  - discovered service id: `echo-service`
-  - install/config/start/stop exercised against the real sibling `lasso-echoservice`
+- `npm run package:pkg`
+- `npm run release:verify`
+- local smoke through the packaged wrapper against the tracked `services/` inventory

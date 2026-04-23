@@ -4,13 +4,15 @@ This repo now ships three bounded release artifacts.
 
 Each artifact has a different job:
 - source template
-- runnable bootstrap-download bundle
-- runnable preloaded bundle
+- runnable bootstrap-download package
+- runnable preloaded package
+
+Runtime and preloaded artifacts are platform-specific because the `pkg` wrapper executable is built for the current runner platform.
 
 ## Source template
 
 Artifact:
-- `service-lasso-app-node-<version>-source.tar.gz`
+- `service-lasso-app-packager-pkg-<version>-source.tar.gz`
 
 Purpose:
 - give downstream teams a downloadable starter repo shape
@@ -33,14 +35,15 @@ What ships:
 Honest label:
 - **starter-template source artifact**
 
-## Runnable bootstrap-download bundle
+## Runnable bootstrap-download package
 
 Artifact:
-- `service-lasso-app-node-<version>-runtime.tar.gz`
+- `service-lasso-app-packager-pkg-<version>-runtime-<platform>.tar.gz`
 
 Purpose:
-- provide a ready-to-run plain-Node host with the core runtime already installed
+- provide a ready-to-run Node host with the core runtime already installed
 - include bundled Service Admin assets for the host shell
+- include a `pkg` launcher executable at the artifact root
 - keep the canonical repo-owned `services/` inventory inside the artifact
 - prove that Echo Service is acquired from manifest-owned release metadata before use
 
@@ -54,6 +57,10 @@ What ships:
 - `docs/`
 - installed `node_modules/`
 - bundled admin assets under `.payload/admin/`
+- bundled Node runtime under `node-runtime/`
+- packaged wrapper executable:
+  - `service-lasso-app-packager-pkg.exe` on Windows
+  - `service-lasso-app-packager-pkg` on POSIX
 - generated `release-artifact.json`
 
 How it works:
@@ -61,23 +68,25 @@ How it works:
 - that manifest carries the bounded `artifact` block pointing at the Echo Service release assets
 - on `install`, Service Lasso downloads and unpacks the matching archive from the manifest metadata
 - the app artifact itself does not ship the Echo Service archive preloaded
+- the `pkg` launcher loads the colocated app payload and boots the same host/runtime flow as `service-lasso-app-node`
 
 Honest label:
-- **runnable bootstrap-download bundle**
+- **runnable bootstrap-download package**
 
-## Runnable preloaded bundle
+## Runnable preloaded package
 
 Artifact:
-- `service-lasso-app-node-<version>-preloaded.tar.gz`
+- `service-lasso-app-packager-pkg-<version>-preloaded-<platform>.tar.gz`
 
 Purpose:
-- provide a ready-to-run plain-Node host with the core runtime already installed
+- provide a ready-to-run Node host with the core runtime already installed
 - include bundled Service Admin assets for the host shell
+- include a `pkg` launcher executable at the artifact root
 - keep the canonical repo-owned `services/` inventory inside the artifact
 - prove that the Echo Service archive is already present before first install/use
 
 What ships:
-- everything in the runnable bootstrap-download bundle
+- everything in the runnable bootstrap-download package
 - preseeded Echo Service archive under:
   - `.workspace/services/echo-service/.state/artifacts/<releaseTag>/<assetName>`
 
@@ -87,15 +96,15 @@ How it works:
 - on `install`, Service Lasso reuses that archive and skips the network fetch
 
 Honest label:
-- **runnable preloaded bundle**
+- **runnable preloaded package**
 
 ## What the release proves
 
 The release now proves:
 - the repo owns explicit tracked service metadata under `services/`
-- the plain-Node host can be packaged repeatably
+- the `pkg` wrapper can launch the packaged Node host payload repeatably
 - the runnable artifact can boot Service Lasso and Service Admin without sibling-repo checkout tricks
-- Echo Service acquisition now depends on manifest-owned archive metadata instead of a generated local wrapper
+- Echo Service acquisition depends on manifest-owned archive metadata instead of a generated local wrapper
 - bootstrap-download mode installs the service payload before first use
 - preloaded mode installs from an already-shipped archive without a first-run download
 
@@ -111,13 +120,19 @@ The repo `.npmrc` is included in the staged artifact so the starter knows which 
 
 ## Commands
 
-Stage the artifacts:
+Build the local `pkg` wrapper:
+
+```bash
+npm run package:pkg
+```
+
+Stage the release artifacts:
 
 ```bash
 npm run release:artifact
 ```
 
-Stage and verify the artifacts:
+Stage and verify the release artifacts:
 
 ```bash
 npm run release:verify
@@ -127,4 +142,4 @@ npm run release:verify
 
 Any application using Service Lasso should keep a tracked `services/` folder in its repo with the service metadata it intends to manage.
 
-This app-node starter now uses that tracked inventory directly for bootstrap-download behavior.
+This app-packager-pkg starter uses that tracked inventory directly and adds a bounded `pkg` launcher on top of the canonical app-node payload model.
