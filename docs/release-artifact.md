@@ -113,6 +113,8 @@ The release now proves:
 This starter depends on the published private core package:
 - `@service-lasso/service-lasso`
 
+The dependency uses the GitHub Packages `latest` dist-tag so newly generated starter repos pick up the current protected-branch date-sha core package instead of the early `0.1.0` bootstrap package.
+
 For local or CI installs from GitHub Packages, provide a token with package read access through:
 - `NODE_AUTH_TOKEN`
 
