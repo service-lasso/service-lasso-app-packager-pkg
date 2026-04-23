@@ -1,5 +1,4 @@
 import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import net from "node:net";
@@ -444,6 +443,22 @@ async function createVerificationAdminDist(rootDir) {
   return adminDistRoot;
 }
 
+async function resolveReleaseAdminDist(repoRoot, outputRoot, sourceAdminDistRoot) {
+  const candidates = [
+    sourceAdminDistRoot,
+    process.env.SERVICE_LASSO_APP_PACKAGER_PKG_ADMIN_DIST_ROOT,
+    path.resolve(repoRoot, "..", "lasso-@serviceadmin", "dist"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (await pathExists(path.join(candidate, "index.html"))) {
+      return candidate;
+    }
+  }
+
+  return createVerificationAdminDist(outputRoot);
+}
+
 async function createVerificationReleaseFixture(rootDir, assetNameOverride = null) {
   const fixtureRoot = path.join(rootDir, ".verify-fixture");
   const workRoot = path.join(fixtureRoot, "work");
@@ -793,12 +808,7 @@ export async function stageReleaseArtifacts({ repoRoot, outputRoot = path.join(r
   const platform = getArtifactPlatform();
   const sourceFiles = await listExistingPaths(repoRoot, SOURCE_RELEASE_PATHS);
   const runtimeFiles = await listExistingPaths(repoRoot, RUNTIME_RELEASE_PATHS);
-  const resolvedAdminDistRoot =
-    sourceAdminDistRoot ??
-    process.env.SERVICE_LASSO_APP_PACKAGER_PKG_ADMIN_DIST_ROOT ??
-    (existsSync(path.resolve(repoRoot, "..", "lasso-@serviceadmin", "dist"))
-      ? path.resolve(repoRoot, "..", "lasso-@serviceadmin", "dist")
-      : null);
+  const resolvedAdminDistRoot = await resolveReleaseAdminDist(repoRoot, outputRoot, sourceAdminDistRoot);
 
   const source = await stageSingleArtifact({
     repoRoot,
