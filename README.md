@@ -50,8 +50,8 @@ The release outputs are:
   - template/source starter for customization
 - `runtime`
   - runnable bootstrap-download bundle with a `pkg` launcher wrapper
-- `preloaded`
-  - runnable bundled/no-download bundle with a `pkg` launcher wrapper
+- `bundled`
+  - runnable no-download bundle with a `pkg` launcher wrapper and acquired service archives under `services/`
 
 Release versions from `main` follow the protected-branch pattern:
 - `yyyy.m.d-<shortsha>`
