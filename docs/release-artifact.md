@@ -5,9 +5,9 @@ This repo now ships three bounded release artifacts.
 Each artifact has a different job:
 - source template
 - runnable bootstrap-download package
-- runnable preloaded package
+- runnable bundled package
 
-Runtime and preloaded artifacts are platform-specific because the `pkg` wrapper executable is built for the current runner platform.
+Runtime and bundled artifacts are platform-specific because the `pkg` wrapper executable is built for the current runner platform.
 
 ## Source template
 
@@ -67,16 +67,16 @@ How it works:
 - the app repo owns `services/echo-service/service.json`
 - that manifest carries the bounded `artifact` block pointing at the Echo Service release assets
 - on `install`, Service Lasso downloads and unpacks the matching archive from the manifest metadata
-- the app artifact itself does not ship the Echo Service archive preloaded
+- the app artifact itself does not ship the Echo Service archive
 - the `pkg` launcher loads the colocated app payload and boots the same host/runtime flow as `service-lasso-app-node`
 
 Honest label:
 - **runnable bootstrap-download package**
 
-## Runnable preloaded package
+## Runnable bundled package
 
 Artifact:
-- `service-lasso-app-packager-pkg-<version>-preloaded-<platform>.tar.gz`
+- `service-lasso-app-packager-pkg-<version>-bundled-<platform>.tar.gz`
 
 Purpose:
 - provide a ready-to-run Node host with the core runtime already installed
@@ -87,16 +87,16 @@ Purpose:
 
 What ships:
 - everything in the runnable bootstrap-download package
-- preseeded Echo Service archive under:
-  - `.workspace/services/echo-service/.state/artifacts/<releaseTag>/<assetName>`
+- acquired Echo Service archive under:
+  - `services/echo-service/.state/artifacts/<releaseTag>/<assetName>`
 
 How it works:
 - the app repo still owns the same canonical `services/echo-service/service.json`
-- the preloaded artifact seeds the matching archive into the runtime-owned service state before first use
+- the release package step acquires the matching archive into the repo-owned service folder before publishing
 - on `install`, Service Lasso reuses that archive and skips the network fetch
 
 Honest label:
-- **runnable preloaded package**
+- **runnable bundled package**
 
 ## What the release proves
 
@@ -106,7 +106,7 @@ The release now proves:
 - the runnable artifact can boot Service Lasso and Service Admin without sibling-repo checkout tricks
 - Echo Service acquisition depends on manifest-owned archive metadata instead of a generated local wrapper
 - bootstrap-download mode installs the service payload before first use
-- preloaded mode installs from an already-shipped archive without a first-run download
+- bundled mode installs from an already-shipped service archive without a first-run download
 
 ## Public package note
 
