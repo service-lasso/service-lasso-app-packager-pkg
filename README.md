@@ -20,8 +20,9 @@ Current implementation:
 - published `@service-lasso/service-lasso` runtime package consumption
 - host-owned shell at `/`
 - mounted sibling `lasso-@serviceadmin` build at `/admin/`
-- tracked repo-owned `services/` definitions for Echo Service and Service Admin
+- tracked repo-owned baseline `services/` definitions for Echo Service, Service Admin, `@node`, and `@traefik`
 - manifest-owned Echo Service archive metadata under `services/echo-service/service.json`
+- manifest-owned Traefik archive metadata under `services/@traefik/service.json`
 - prepared local `servicesRoot` copied from the tracked service inventory before runtime startup
 
 Current local start command:
