@@ -64,8 +64,8 @@ What ships:
 - generated `release-artifact.json`
 
 How it works:
-- the app repo owns the baseline `services/` inventory, including `echo-service`, `service-admin`, `@node`, `localcert`, `nginx`, and `@traefik`
-- `@traefik` declares `localcert` and `nginx` as dependencies in its manifest
+- the app repo owns the baseline `services/` inventory, including `echo-service`, `@serviceadmin`, `@node`, `@localcert`, `@nginx`, and `@traefik`
+- `@traefik` declares `@localcert` and `@nginx` as dependencies in its manifest
 - release-backed manifests carry bounded `artifact` blocks pointing at their service release assets
 - on `install`, Service Lasso downloads and unpacks the matching archive from the manifest metadata
 - the app artifact itself does not ship the Echo Service archive
@@ -103,7 +103,7 @@ Honest label:
 
 The release now proves:
 - the repo owns explicit tracked service metadata under `services/`
-- the tracked service metadata includes the baseline Traefik dependency graph through `localcert` and `nginx`
+- the tracked service metadata includes the baseline Traefik dependency graph through `@localcert` and `@nginx`
 - the `pkg` wrapper can launch the packaged Node host payload repeatably
 - the runnable artifact can boot Service Lasso and Service Admin without sibling-repo checkout tricks
 - Echo Service acquisition depends on manifest-owned archive metadata instead of a generated local wrapper
